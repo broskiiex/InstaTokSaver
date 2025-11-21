@@ -1,0 +1,1 @@
+Полный бот InstaTok Saver. Вставьте токен в .env и деплойте на Render.
