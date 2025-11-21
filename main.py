@@ -26,11 +26,7 @@ FREE_LIMIT = 5
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
 
-# РАБОЧИЕ API
-TIKTOK_API = "https://www.tikwm.com/api/?url={url}"
-INSTAGRAM_API = "https://api.sssapi.net/instagram?url={url}"
-
-
+TIKTOK_API = "https://api.sssapi.net/tiktok?url={url}"  # TikTok рабочий
 URL_RE = re.compile(r'https?://\S+')
 
 def get_user(user_id):
@@ -43,6 +39,38 @@ def increment_used(user_id):
     cur.execute("UPDATE users SET free_used = free_used + 1 WHERE user_id = ?", (user_id,))
     conn.commit()
 
+
+# -----------------------
+#   INSTAGRAM FIXED API
+# -----------------------
+def download_instagram(url: str):
+    api_url = "https://saveinsta.io/core/ajax.php"
+
+    payload = {
+        "url": url,
+        "action": "post"
+    }
+
+    headers = {
+        "X-Requested-With": "XMLHttpRequest",
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    r = requests.post(api_url, data=payload, headers=headers)
+    html = r.text
+
+    if "download" not in html:
+        return None
+
+    # вытащим первый mp4
+    links = re.findall(r'href="(.*?)"', html)
+    for link in links:
+        if link.endswith(".mp4"):
+            return link
+
+    return None
+
+
 @dp.message_handler(commands=['start', 'help'])
 async def send_welcome(message: types.Message):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -52,14 +80,6 @@ async def send_welcome(message: types.Message):
             "Просто отправьте ссылку на видео.")
     await message.reply(text, reply_markup=keyboard)
 
-@dp.message_handler(commands=['balance'])
-async def cmd_balance(message: types.Message):
-    free_used, pro = get_user(message.from_user.id)
-    await message.reply(f"Использовано бесплатных скачиваний: {free_used}/{FREE_LIMIT}. PRO: {'Да' if pro else 'Нет'}")
-
-@dp.message_handler(commands=['buy'])
-async def cmd_buy(message: types.Message):
-    await message.reply("Чтобы отключить лимит — купите PRO. Связь: @your_support_here (замените на ваш контакт).")
 
 @dp.message_handler()
 async def handle_message(message: types.Message):
@@ -70,6 +90,7 @@ async def handle_message(message: types.Message):
         return
 
     url = urls[0]
+
     free_used, pro = get_user(message.from_user.id)
     if not pro and free_used >= FREE_LIMIT:
         await message.reply("Вы исчерпали бесплатный лимит. Купите PRO (/buy) или попробуйте позже.")
@@ -78,42 +99,34 @@ async def handle_message(message: types.Message):
     await message.reply("Обрабатываю ссылку, подождите...")
 
     try:
-        # TikTok
-        if "tiktok.com" in url or "vt.tiktok.com" in url:
+        # -------------- TIKTOK --------------
+        if "tiktok.com" in url:
             api_url = TIKTOK_API.format(url=url)
-            data = requests.get(api_url, timeout=30).json()
+            resp = requests.get(api_url, timeout=30).json()
+            video_url = resp.get("video_no_watermark") or resp.get("video")
 
-            if not data.get("data"):
-                await message.reply("Не удалось получить видео. Попробуйте другую ссылку.")
-                return
-
-            video_url = data["data"]["play"]  # без водяного знака
-
-        # Instagram
-        elif "instagram.com" in url or "instagr.am" in url:
-            api_url = INSTAGRAM_API.format(url=url)
-            data = requests.get(api_url, timeout=30).json()
-
-            if "data" not in data or "medias" not in data["data"]:
-                await message.reply("Не удалось получить видео. Попробуйте другую ссылку.")
-                return
-
-            video_url = data["data"]["medias"][0]["url"]
+        # -------------- INSTAGRAM --------------
+        elif "instagram.com" in url:
+            video_url = download_instagram(url)
 
         else:
-            await message.reply("Ссылка не распознана как TikTok или Instagram.")
+            await message.reply("Ссылка не распознана.")
             return
 
-        # Скачивание видео
-        file = requests.get(video_url, timeout=60).content
-        bio = io.BytesIO(file)
+        if not video_url:
+            await message.reply("Не удалось получить видео. Ссылка может быть приватной.")
+            return
+
+        video_resp = requests.get(video_url)
+        bio = io.BytesIO(video_resp.content)
         bio.seek(0)
         increment_used(message.from_user.id)
 
-        await message.answer_video(InputFile(bio, "video.mp4"))
+        await message.answer_video(InputFile(bio, filename="video.mp4"))
 
     except Exception as e:
-        await message.reply(f"Ошибка при скачивании: {e}")
+        await message.reply(f"Ошибка: {e}")
+
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
