@@ -28,7 +28,8 @@ dp = Dispatcher(bot)
 
 # РАБОЧИЕ API
 TIKTOK_API = "https://www.tikwm.com/api/?url={url}"
-INSTAGRAM_API = "https://igram.world/api/ig?url={url}"
+INSTAGRAM_API = "https://api.sssapi.net/instagram?url={url}"
+
 
 URL_RE = re.compile(r'https?://\S+')
 
