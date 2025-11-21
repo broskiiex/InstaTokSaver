@@ -37,8 +37,13 @@ def increment(uid):
 async def start(message: types.Message):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("TikTok", "Instagram", "PRO", "Баланс")
-    await message.reply("Привет! Я InstaTok Saver — скачиваю видео из TikTok/Instagram без водяных знаков.
-Просто вставь ссылку.", reply_markup=kb)
+    
+    text = (
+        "Привет! Я InstaTok Saver — скачиваю видео из TikTok/Instagram без водяных знаков.\n"
+        "Просто вставь ссылку ↓"
+    )
+    
+    await message.reply(text, reply_markup=kb)
 
 @dp.message_handler(commands=["balance"])
 async def balance(message: types.Message):
@@ -72,11 +77,12 @@ async def handle(message: types.Message):
             return await message.reply("Не удалось получить видео.")
 
         file = requests.get(video).content
-        bio = io.BytesIO(file); bio.seek(0)
+        bio = io.BytesIO(file)
+        bio.seek(0)
         increment(message.from_user.id)
         await message.answer_video(InputFile(bio, "video.mp4"))
     except Exception as e:
         await message.reply("Ошибка: " + str(e))
 
 if __name__ == "__main__":
-    executor.start_polling(dp)
+    executor.start_polling(dp) 
